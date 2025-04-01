@@ -7,3 +7,13 @@ Accessibility Information: Include details about elevator and escalator availabi
 Service Status Dashboard: Show an overview of the status of all MTA services in a single dashboard.
 Multilingual Support: Offer the application in multiple languages.
 User Accounts: Basic account creation and user authentication using Firebase.
+
+## How to Run
+### make sure you have the right env
+open terminal at the front-end pkg
+npm install
+npm install @vis.gl/react-google-maps
+### Run the backend
+python app.py
+### Run the front-end
+npm start
