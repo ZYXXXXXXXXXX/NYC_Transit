@@ -10,10 +10,10 @@ User Accounts: Basic account creation and user authentication using Firebase.
 
 ## How to Run
 ### make sure you have the right env
-open terminal at the front-end pkg
-npm install
-npm install @vis.gl/react-google-maps
+open terminal at the front-end pkg.
+npm install.
+npm install @vis.gl/react-google-maps.
 ### Run the backend
-python app.py
+python app.py.
 ### Run the front-end
-npm start
+npm start.
