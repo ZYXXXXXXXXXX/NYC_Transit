@@ -1,4 +1,3 @@
-// Map.tsx (TypeScript)
 import React, { useEffect, useState, useRef } from 'react';
 import GoogleMapReact from 'google-map-react';
 import Marker from './Marker';
@@ -14,20 +13,18 @@ interface LineData {
   path: Array<{ lat: number; lng: number }>;
 }
 
-
-
 export default function SubwayMap() {
   const [stations, setStations] = useState([]);
   const [lineCoordinates, setLineCoordinates] = useState<LineData[]>([]);
   const currentLinesRef = useRef<google.maps.Polyline[]>([]);
 
-  const mapRef = useRef(null);   // 用来保存 map 实例
-  const mapsRef = useRef(null);  // 用来保存 maps 对象（google.maps）
+  const mapRef = useRef(null);   // Used to store map instance
+  const mapsRef = useRef(null);  // Used to store maps object (google.maps)
 
-  // 用来保存当前绘制在地图上的线路，方便在点击其他站台时清除或更新
+  // Used to store currently drawn lines on the map, for easy clearing/updating when clicking other stations
   const currentLineRef = useRef(null);
 
-  // 1. 初始化时获取地铁站点数据
+  // 1. Fetch subway station data during initialization
   useEffect(() => {
     async function fetchStations() {
       try {
@@ -35,36 +32,36 @@ export default function SubwayMap() {
         const data = await res.json();
         setStations(data);
       } catch (err) {
-        console.error('获取站点信息出错', err);
+        console.error('Error fetching station information', err);
       }
     }
     fetchStations();
   }, []);
 
-  // 2. 点击某个 Marker 时，向后端请求该站的整条线路数据
+  // 2. When clicking a Marker, request the complete route data for that station from the backend
   const handleMarkerClick = async (stationId: string) => {
     try {
-      // 1. 获取该站点的线路信息
+      // 1. Get route information for this station
       const routesRes = await fetch(`http://127.0.0.1:5000/api/stations/${stationId}/routes`);
       const routesData = await routesRes.json();
       const routes = routesData.routes;
   
-      // 2. 获取全局站点和线路的映射关系
+      // 2. Get global station-route mapping relationship
       const stationRouteMapRes = await fetch('http://127.0.0.1:5000/api/station-route-map');
       const stationRouteMap = await stationRouteMapRes.json();
   
-      // 3. 为每个线路构造路径数据
+      // 3. Construct path data for each route
       const newLineCoordinates: LineData[] = routes.map(route => {
-        // 找出所有包含当前线路 id 的站点 key
+        // Find all station keys containing current route id
         const stationIds = Object.keys(stationRouteMap).filter(stationKey => {
           return stationRouteMap[stationKey].includes(route.id);
         });
   
-        // 根据 stationIds 从 stations 状态中过滤出对应的坐标
+        // Filter corresponding coordinates from stations state based on stationIds
         const path = stationIds
           .map(id => stations.find(s => s.id === id))
-          .filter(Boolean) // 排除未找到的数据
-          // 如果需要排序，可根据站点的某个顺序字段进行排序
+          .filter(Boolean) // Exclude unfound data
+          // If sorting is needed, can sort according to some order field of stations
           .map(station => ({ lat: station.lat, lng: station.lng }));
   
         return {
@@ -73,25 +70,24 @@ export default function SubwayMap() {
         };
       });
   
-      // 4. 更新 state，触发线路绘制
+      // 4. Update state, trigger route drawing
       setLineCoordinates(newLineCoordinates);
     } catch (err) {
-      console.error('获取线路数据出错', err);
+      console.error('Error fetching route data', err);
     }
   };
 
-  // 3. 监听 lineCoordinates 变化，一旦有新线路数据，就用原生 API 进行绘制
-// Map.tsx
+  // 3. Listen to lineCoordinates changes, once new route data is available, use native API to draw
 useEffect(() => {
   if (!mapRef.current || !mapsRef.current || lineCoordinates.length === 0) return;
 
-  // 清理之前的线路
+  // Clear previous lines
   if (currentLinesRef.current.length > 0) {
     currentLinesRef.current.forEach(line => line.setMap(null));
     currentLinesRef.current = [];
   }
 
-  // 绘制新线路
+  // Draw new lines
   const newLines = lineCoordinates.map(line => {
     return new mapsRef.current.Polyline({
       path: line.path,
@@ -102,14 +98,14 @@ useEffect(() => {
     });
   });
 
-  // 将新线路添加到地图并保存引用
+  // Add new lines to map and save reference
   newLines.forEach(line => line.setMap(mapRef.current));
   currentLinesRef.current = newLines;
 
 }, [lineCoordinates]);
 
 
-  // 4. Google Map 的 onGoogleApiLoaded 回调
+  // 4. Google Map's onGoogleApiLoaded callback
   const handleApiLoaded = ({ map, maps }) => {
     mapRef.current = map;
     mapsRef.current = maps;
@@ -119,8 +115,8 @@ useEffect(() => {
     <div style={{ height: '90vh', width: '100%' }}>
       <GoogleMapReact
         bootstrapURLKeys={{ key: process.env.REACT_APP_GOOGLE_MAPS_API_KEY || '' }}
-        defaultCenter={{ lat: 40.714, lng: -74.001 }} // 默认中心点可自行设置
-        defaultZoom={14}                            // 默认缩放级别
+        defaultCenter={{ lat: 40.714, lng: -74.001 }} // Default center point can be customized
+        defaultZoom={14}                            // Default zoom level
         options={{
           mapId: '84a43dd24922060d', 
         }}
