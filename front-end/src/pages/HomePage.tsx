@@ -8,7 +8,6 @@ const HomePage: React.FC = () => {
     const defaultZoom = 11;
     return (
         <div>
-            <Title>NYC Transit Hub</Title>
             <Map center={defaultCenter} zoom={defaultZoom} />
             <DateDisplay />
         </div>
