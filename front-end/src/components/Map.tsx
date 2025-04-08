@@ -2,6 +2,8 @@ import React, { useEffect, useState, useRef } from 'react';
 import GoogleMapReact from 'google-map-react';
 import Marker from './Marker';
 
+import { SubwayRoute, Station } from '~/types/api';
+
 interface MapProps {
   center: { lat: number; lng: number };
   zoom: number;
@@ -13,8 +15,8 @@ interface LineData {
   path: Array<{ lat: number; lng: number }>;
 }
 
-export default function SubwayMap() {
-  const [stations, setStations] = useState([]);
+export default function SubwayMap(props: MapProps) {
+  const [stations, setStations] = useState<Station[]>([]);
   const [lineCoordinates, setLineCoordinates] = useState<LineData[]>([]);
   const currentLinesRef = useRef<google.maps.Polyline[]>([]);
 
@@ -44,7 +46,7 @@ export default function SubwayMap() {
       // 1. Get route information for this station
       const routesRes = await fetch(`http://127.0.0.1:5000/api/stations/${stationId}/routes`);
       const routesData = await routesRes.json();
-      const routes = routesData.routes;
+      const routes: SubwayRoute[] = routesData.routes;
   
       // 2. Get global station-route mapping relationship
       const stationRouteMapRes = await fetch('http://127.0.0.1:5000/api/station-route-map');
@@ -60,8 +62,7 @@ export default function SubwayMap() {
         // Filter corresponding coordinates from stations state based on stationIds
         const path = stationIds
           .map(id => stations.find(s => s.id === id))
-          .filter(Boolean) // Exclude unfound data
-          // If sorting is needed, can sort according to some order field of stations
+          .filter((station): station is NonNullable<typeof station> => Boolean(station)) // Type guard
           .map(station => ({ lat: station.lat, lng: station.lng }));
   
         return {
