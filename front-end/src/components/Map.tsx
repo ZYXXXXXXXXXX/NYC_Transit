@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import GoogleMapReact from 'google-map-react';
 import Marker from './Marker';
-
+import StationInfoDialog from './StationInfoDialog'
 import { SubwayRoute, Station } from '~/types/api';
 
 interface MapProps {
@@ -17,8 +17,11 @@ interface LineData {
 
 export default function SubwayMap(props: MapProps) {
   const [stations, setStations] = useState<Station[]>([]);
+  const [dialogOpen, setDialogOpen] = useState(false);
   const [lineCoordinates, setLineCoordinates] = useState<LineData[]>([]);
+  const [selectedStationInfo, setSelectedStationInfo] = useState<Station | null>(null);
   const currentLinesRef = useRef<google.maps.Polyline[]>([]);
+  
 
   const mapRef = useRef(null);   // Used to store map instance
   const mapsRef = useRef(null);  // Used to store maps object (google.maps)
@@ -33,6 +36,15 @@ export default function SubwayMap(props: MapProps) {
         const res = await fetch('http://127.0.0.1:5000/api/stations');
         const data = await res.json();
         setStations(data);
+        stations.forEach(station => {
+          const circle = new google.maps.Circle({
+            strokeColor: "#000000",
+            fillColor: "#FFFFFF",
+            map: mapRef.current,
+            center: { lat: station.lat, lng:station.lng },
+            radius: 5,
+          })
+        })
       } catch (err) {
         console.error('Error fetching station information', err);
       }
@@ -43,6 +55,9 @@ export default function SubwayMap(props: MapProps) {
   // 2. When clicking a Marker, request the complete route data for that station from the backend
   const handleMarkerClick = async (stationId: string) => {
     try {
+      // 0. Get station base info
+      const infoRes = await fetch(`http://127.0.0.1:5000/api/stations/${stationId}/routes`);
+      const stationInfo = await infoRes.json();  // contains: id, name, accessibility
       // 1. Get route information for this station
       const routesRes = await fetch(`http://127.0.0.1:5000/api/stations/${stationId}/routes`);
       const routesData = await routesRes.json();
@@ -73,6 +88,15 @@ export default function SubwayMap(props: MapProps) {
   
       // 4. Update state, trigger route drawing
       setLineCoordinates(newLineCoordinates);
+      setSelectedStationInfo({
+        id: stationId,
+        name: stationInfo.name,
+        routes: routes.map(r => ({
+          id: r.id,
+          color: r.color
+        }))
+      });
+      setDialogOpen(true);
     } catch (err) {
       console.error('Error fetching route data', err);
     }
@@ -134,6 +158,11 @@ useEffect(() => {
           />
         ))}
       </GoogleMapReact>
+      <StationInfoDialog
+            open={dialogOpen}
+            onClose={() => setDialogOpen(false)}
+            station={selectedStationInfo}
+      />
     </div>
   );
 };
