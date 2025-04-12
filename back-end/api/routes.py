@@ -1,3 +1,6 @@
+import csv
+import os
+
 from flask import jsonify, request
 from services.data_service import DataService
 from flask import jsonify, request
@@ -180,4 +183,22 @@ def register_routes(bp):
    def get_station_route_schedule(station_id, route_id):
        """Get schedule for a specific route at a specific station"""
        data = data_service.get_station_route_schedule(station_id, route_id)
+       return jsonify(data)
+
+   @bp.route('/stations/accessible')
+   def get_accessible_stations():
+       """Get all stations with accessibility features"""
+       stations = data_service.get_accessible_stations()
+       return jsonify(stations)
+
+   @bp.route('/test/accessibility/equipment')
+   def test_accessibility_equipment():
+       """Test endpoint to check equipment data from MTA API"""
+       equipment_data = data_service.get_accessibility_data('equipment')
+       return jsonify(equipment_data)
+
+   @bp.route('/debug/gtfs-mapping-issue')
+   def investigate_gtfs_mapping():
+       """调查GTFS映射问题"""
+       data = data_service.investigate_gtfs_mapping_issue()
        return jsonify(data)

@@ -915,12 +915,6 @@ class DataService:
     def get_station_details(self, station_id):
         """
         Get comprehensive station details including accessibility info, routes, and schedule
-
-        Args:
-            station_id (str): Station ID
-
-        Returns:
-            dict: Detailed station information
         """
         cache_key = f"station_details_{station_id}"
         cached_data = cache.get(cache_key, 300)  # cache 5 min
@@ -928,6 +922,7 @@ class DataService:
             return cached_data
 
         try:
+
             stops_file = os.path.join('data', 'gtfs_subway', 'stops.txt')
             station_info = None
 
@@ -948,19 +943,56 @@ class DataService:
             if not station_info:
                 return {"error": "Station not found"}
 
+
             routes_data = self.get_routes_for_station(station_id)
             station_info["routes"] = routes_data.get("routes", []) if "error" not in routes_data else []
 
-            accessibility_data = self.get_station_accessibility(station_id)
+
+            equipment_data = self.get_accessibility_data('equipment')
+            current_outages = self.get_accessibility_data('current')
+
+
             accessibility_info = {
                 "has_accessibility": False,
-                "wheelchair_boarding": station_info.get("wheelchair_boarding") == "1",
                 "equipment": []
             }
 
-            if "equipment" in accessibility_data and len(accessibility_data["equipment"]) > 0:
-                accessibility_info["has_accessibility"] = True
-                accessibility_info["equipment"] = accessibility_data["equipment"]
+            if not isinstance(equipment_data, dict) or "error" not in equipment_data:
+                station_name = station_info["name"].strip()
+                matching_equipment = []
+
+
+                cleaned_station_name = station_name.lower()
+
+                for item in equipment_data:
+                    item_station = item.get('station', '').strip().lower()
+                    gtfs_id = item.get('elevatorgtfsstopid', '')
+
+                    # mach :GTFS ID or station name
+                    if gtfs_id == station_id or (item_station and (
+                            item_station in cleaned_station_name or
+                            cleaned_station_name in item_station)):
+
+                        equipment_info = {
+                            'equipment_no': item.get('equipmentno', ''),
+                            'equipment_type': item.get('equipmenttype', ''),
+                            'serving': item.get('serving', ''),
+                            'is_active': item.get('isactive', '') != 'Y'
+                        }
+
+                        if not isinstance(current_outages, dict) or "error" not in current_outages:
+                            equipment_id = item.get('equipmentno', '')
+                            if "outages" in current_outages:
+                                for outage in current_outages["outages"]:
+                                    if outage.get("equipment_id") == equipment_id:
+                                        equipment_info["current_status"] = outage
+
+                        matching_equipment.append(equipment_info)
+
+
+                if matching_equipment:
+                    accessibility_info["has_accessibility"] = True
+                    accessibility_info["equipment"] = matching_equipment
 
             station_info["accessibility"] = accessibility_info
 
@@ -971,7 +1003,9 @@ class DataService:
             return station_info
 
         except Exception as e:
-            return {"error": f"Failed to get station details: {str(e)}"}
+            import traceback
+            trace = traceback.format_exc()
+            return {"error": f"Failed to get station details: {str(e)}", "trace": trace}
 
     def get_station_schedule(self, station_id):
         """
@@ -1127,7 +1161,7 @@ class DataService:
             dict: Schedule information for specific route
         """
         try:
-            # GTFS文件路径
+
             stop_times_file = os.path.join('data', 'gtfs_subway', 'stop_times.txt')
             trips_file = os.path.join('data', 'gtfs_subway', 'trips.txt')
 
@@ -1199,3 +1233,131 @@ class DataService:
 
         except Exception as e:
             return {"error": f"Failed to get station route schedule: {str(e)}"}
+
+    def get_accessible_stations(self):
+        """
+        Get all stations with accessibility features based on MTA's accessibility API
+        """
+        try:
+
+            cache_key = "accessible_stations"
+            cached_data = None  # 测试时临时禁用缓存
+            if cached_data:
+                return cached_data
+
+
+            equipment_data = self.get_accessibility_data('equipment')
+            if "error" in equipment_data:
+                return {"error": f"Failed to get equipment data: {equipment_data['error']}"}
+
+            print(f"Equipment data count: {len(equipment_data) if isinstance(equipment_data, list) else 'not a list'}")
+
+
+            station_route_map = self.get_station_route_map()
+            if isinstance(station_route_map, dict) and "error" in station_route_map:
+                print(f"Error getting station route map: {station_route_map['error']}")
+                station_route_map = {}
+            else:
+                print(f"Station route map keys: {len(station_route_map)} entries")
+                sample_keys = list(station_route_map.keys())[:5]
+                print(f"Sample station IDs in route map: {sample_keys}")
+                for key in sample_keys:
+                    print(f"  Routes for {key}: {station_route_map[key]}")
+
+
+            all_routes = {}
+            routes_file = os.path.join('data', 'gtfs_subway', 'routes.txt')
+            try:
+                with open(routes_file, 'r', encoding='utf-8') as f:
+                    reader = csv.DictReader(f)
+                    for row in reader:
+                        all_routes[row['route_id']] = {
+                            "id": row['route_id'],
+                            "short_name": row['route_short_name'],
+                            "long_name": row['route_long_name'],
+                            "color": row.get('route_color', ''),
+                            "text_color": row.get('route_text_color', '')
+                        }
+                print(f"Total routes loaded: {len(all_routes)}")
+            except Exception as e:
+                print(f"Error reading routes file: {str(e)}")
+                all_routes = {}
+
+
+            stations_by_complex = {}
+
+
+            for item in equipment_data:
+                complex_id = item.get('stationcomplexid', '').strip()
+                gtfs_id = item.get('elevatorgtfsstopid', '').strip()
+                station_name = item.get('station', '').strip()
+
+                if not complex_id or not station_name:
+                    continue
+
+                if complex_id not in stations_by_complex:
+                    stations_by_complex[complex_id] = {
+                        'id': complex_id,
+                        'name': station_name,
+                        'has_accessibility': True,
+                        'equipment': [],
+                        'routes': [],
+                        'gtfs_ids': set()
+                    }
+
+
+                equipment_info = {
+                    'equipment_no': item.get('equipmentno', ''),
+                    'equipment_type': item.get('equipmenttype', ''),
+                    'serving': item.get('serving', ''),
+                    'is_active': item.get('isactive', '') != 'Y'
+                }
+                stations_by_complex[complex_id]['equipment'].append(equipment_info)
+
+
+                if gtfs_id:
+                    stations_by_complex[complex_id]['gtfs_ids'].add(gtfs_id)
+
+
+            for complex_id, station_data in stations_by_complex.items():
+                gtfs_ids = station_data['gtfs_ids']
+                print(f"Processing station {station_data['name']} with GTFS IDs: {gtfs_ids}")
+
+                route_ids = set()
+
+
+                for gtfs_id in gtfs_ids:
+                    if gtfs_id in station_route_map:
+                        found_routes = station_route_map[gtfs_id]
+                        print(f"  Found routes {found_routes} for GTFS ID {gtfs_id}")
+                        route_ids.update(found_routes)
+
+
+                for route_id in route_ids:
+                    if route_id in all_routes:
+                        station_data['routes'].append(all_routes[route_id])
+
+                print(f"  Final routes count: {len(station_data['routes'])}")
+
+                station_data['gtfs_ids'] = list(station_data['gtfs_ids'])
+
+
+            accessible_stations = []
+            for station in stations_by_complex.values():
+                if 'gtfs_ids' in station:
+                    del station['gtfs_ids']
+                accessible_stations.append(station)
+
+            print(f"\nTotal accessible stations: {len(accessible_stations)}")
+
+
+            cache.set(cache_key, accessible_stations)
+            return accessible_stations
+
+        except Exception as e:
+            import traceback
+            trace = traceback.format_exc()
+            print(f"Error in get_accessible_stations: {str(e)}")
+            print(trace)
+            return {"error": f"Failed to get accessible stations: {str(e)}", "trace": trace}
+
