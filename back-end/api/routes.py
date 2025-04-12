@@ -164,3 +164,20 @@ def register_routes(bp):
                return jsonify(result), 404
            return jsonify(result), 500
        return jsonify(result)
+
+   @bp.route('/stations/<station_id>/details')
+   def get_station_details(station_id):
+       """Get comprehensive station details"""
+       details = data_service.get_station_details(station_id)
+       if "error" in details:
+           error_message = details["error"]
+           if error_message == "Station not found":
+               return jsonify(details), 404
+           return jsonify(details), 500
+       return jsonify(details)
+
+   @bp.route('/stations/<station_id>/routes/<route_id>/schedule')
+   def get_station_route_schedule(station_id, route_id):
+       """Get schedule for a specific route at a specific station"""
+       data = data_service.get_station_route_schedule(station_id, route_id)
+       return jsonify(data)

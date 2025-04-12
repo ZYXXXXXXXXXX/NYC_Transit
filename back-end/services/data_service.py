@@ -400,44 +400,9 @@ class DataService:
         except Exception as e:
             return {"error": str(e)}
 
-    def get_accessibility_data(self, data_type):
-        """
-        Get accessibility data
-
-        Args:
-            data_type (str): Data type ('current', 'upcoming', 'equipment')
-
-        Returns:
-            dict: Accessibility data or error
-        """
-        # Validate data type
-        if data_type not in ELEVATOR_ESCALATOR_FEEDS:
-            return {"error": f"Invalid accessibility data type: {data_type}"}
-
-        # Check cache
-        cache_key = f"accessibility_{data_type}"
-        cached_data = cache.get(cache_key, self.get_cache_timeout('accessibility', data_type))
-        if cached_data:
-            return cached_data
-
-        # Fetch data
-        try:
-            response = requests.get(ELEVATOR_ESCALATOR_FEEDS[data_type])
-
-            if response.status_code == 200:
-                data = response.json()
-                # Cache result
-                cache.set(cache_key, data)
-                return data
-            else:
-                return {"error": f"HTTP error: {response.status_code}"}
-
-        except Exception as e:
-            return {"error": str(e)}
-
     def get_station_accessibility(self, station_id):
         """
-        Get station accessibility info
+        Get detailed station accessibility info
 
         Args:
             station_id (str): Station ID
@@ -445,28 +410,51 @@ class DataService:
         Returns:
             dict: Station accessibility info
         """
-        # Get equipment info
+
         equipment_data = self.get_accessibility_data('equipment')
 
-        # Check for errors
         if "error" in equipment_data:
             return equipment_data
 
-        # Filter station-specific equipment
-        # Note: Adjust based on actual data structure
+        current_data = self.get_accessibility_data('current')
+        upcoming_data = self.get_accessibility_data('upcoming')
         station_equipment = []
 
-        # Assuming equipment_data is a dict with an equipment list
+
         if "equipment" in equipment_data:
             for item in equipment_data["equipment"]:
                 if item.get("station_id") == station_id:
+
+                    if "elevatorId" in item and "current" in current_data:
+                        for status in current_data.get("outages", []):
+                            if status.get("equipment_id") == item["elevatorId"]:
+                                item["status"] = status
+
                     station_equipment.append(item)
 
-        # Return result
+        # get info from stops.txt
+        wheelchair_info = None
+        stops_file = os.path.join('data', 'gtfs_subway', 'stops.txt')
+
+        try:
+            with open(stops_file, 'r', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    if row['stop_id'] == station_id and 'wheelchair_boarding' in row:
+                        wheelchair_info = {
+                            "wheelchair_boarding": row['wheelchair_boarding'],
+                            "wheelchair_accessible": row['wheelchair_boarding'] == "1"
+                        }
+                        break
+        except Exception:
+            pass
+
+        # 返回结果
         return {
             "station_id": station_id,
             "equipment_count": len(station_equipment),
-            "equipment": station_equipment
+            "equipment": station_equipment,
+            "wheelchair_info": wheelchair_info
         }
 
     def get_stations(self):
@@ -861,57 +849,353 @@ class DataService:
             return cached_data
 
         try:
-            # Process steps:
-            # 1. Get trips for this route from trips.txt
-            # 2. Extract trip_ids from trips
-            # 3. Get stops for each trip from stop_times.txt
-            # 4. Get stop details from stops.txt
-
+            # file addr
             trips_file = os.path.join('data', 'gtfs_subway', 'trips.txt')
             stop_times_file = os.path.join('data', 'gtfs_subway', 'stop_times.txt')
             stops_file = os.path.join('data', 'gtfs_subway', 'stops.txt')
 
-            # Get trip_ids for this route_id
-            trip_ids = set()
+            #  route trip
+            representative_trip_id = None
             with open(trips_file, 'r', encoding='utf-8') as f:
                 reader = csv.DictReader(f)
                 for row in reader:
                     if row['route_id'] == route_id:
-                        trip_ids.add(row['trip_id'])
 
-            if not trip_ids:
+                        if 'direction_id' in row and row['direction_id'] == '0':
+                            representative_trip_id = row['trip_id']
+                            break
+
+                        if not representative_trip_id:
+                            representative_trip_id = row['trip_id']
+
+            if not representative_trip_id:
                 return {"error": f"No trips found for route: {route_id}"}
 
-            # Get stops for each trip
-            stop_ids = set()
+            #  stop_sequence
+            stop_sequence = []
             with open(stop_times_file, 'r', encoding='utf-8') as f:
                 reader = csv.DictReader(f)
                 for row in reader:
-                    if row['trip_id'] in trip_ids:
-                        stop_ids.add(row['stop_id'])
+                    if row['trip_id'] == representative_trip_id:
+                        stop_sequence.append({
+                            'stop_id': row['stop_id'],
+                            'sequence': int(row['stop_sequence'])
+                        })
 
-            # Get stop details
-            stops = []
+            stop_sequence.sort(key=lambda x: x['sequence'])
+
+            stops_info = {}
             with open(stops_file, 'r', encoding='utf-8') as f:
                 reader = csv.DictReader(f)
                 for row in reader:
-                    if row['stop_id'] in stop_ids:
-                        stop = {
-                            "id": row['stop_id'],
-                            "name": row['stop_name'],
-                            "lat": float(row['stop_lat']),
-                            "lng": float(row['stop_lon'])
-                        }
-                        stops.append(stop)
+                    stops_info[row['stop_id']] = {
+                        "id": row['stop_id'],
+                        "name": row['stop_name'],
+                        "lat": float(row['stop_lat']),
+                        "lng": float(row['stop_lon'])
+                    }
+
+            # ordered_list
+            ordered_stops = []
+            for stop in stop_sequence:
+                if stop['stop_id'] in stops_info:
+                    ordered_stops.append(stops_info[stop['stop_id']])
 
             result = {
                 "route_id": route_id,
-                "stops": stops
+                "stops": ordered_stops
             }
 
-            # Cache results
             cache.set(cache_key, result)
             return result
 
         except Exception as e:
             return {"error": f"Failed to load stops for route: {str(e)}"}
+
+    def get_station_details(self, station_id):
+        """
+        Get comprehensive station details including accessibility info, routes, and schedule
+
+        Args:
+            station_id (str): Station ID
+
+        Returns:
+            dict: Detailed station information
+        """
+        cache_key = f"station_details_{station_id}"
+        cached_data = cache.get(cache_key, 300)  # cache 5 min
+        if cached_data:
+            return cached_data
+
+        try:
+            stops_file = os.path.join('data', 'gtfs_subway', 'stops.txt')
+            station_info = None
+
+            with open(stops_file, 'r', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    if row['stop_id'] == station_id:
+                        station_info = {
+                            "id": row['stop_id'],
+                            "name": row['stop_name'],
+                            "lat": float(row['stop_lat']),
+                            "lng": float(row['stop_lon']),
+                            "wheelchair_boarding": row.get('wheelchair_boarding', '0'),
+                            "location_type": row.get('location_type', '0')
+                        }
+                        break
+
+            if not station_info:
+                return {"error": "Station not found"}
+
+            routes_data = self.get_routes_for_station(station_id)
+            station_info["routes"] = routes_data.get("routes", []) if "error" not in routes_data else []
+
+            accessibility_data = self.get_station_accessibility(station_id)
+            accessibility_info = {
+                "has_accessibility": False,
+                "wheelchair_boarding": station_info.get("wheelchair_boarding") == "1",
+                "equipment": []
+            }
+
+            if "equipment" in accessibility_data and len(accessibility_data["equipment"]) > 0:
+                accessibility_info["has_accessibility"] = True
+                accessibility_info["equipment"] = accessibility_data["equipment"]
+
+            station_info["accessibility"] = accessibility_info
+
+            schedule_info = self.get_station_schedule(station_id)
+            station_info["schedule"] = schedule_info
+
+            cache.set(cache_key, station_info)
+            return station_info
+
+        except Exception as e:
+            return {"error": f"Failed to get station details: {str(e)}"}
+
+    def get_station_schedule(self, station_id):
+        """
+        Get schedule information for a station, including all routes serving it
+
+        Args:
+            station_id (str): Station ID
+
+        Returns:
+            dict: Schedule information
+        """
+        try:
+
+            stop_times_file = os.path.join('data', 'gtfs_subway', 'stop_times.txt')
+            trips_file = os.path.join('data', 'gtfs_subway', 'trips.txt')
+
+            routes_for_station = self.get_routes_for_station(station_id)
+            route_ids = [route["id"] for route in routes_for_station.get("routes", [])]
+
+            # get route id
+            trip_ids_by_route = {}
+            with open(trips_file, 'r', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    if row['route_id'] in route_ids:
+                        if row['route_id'] not in trip_ids_by_route:
+                            trip_ids_by_route[row['route_id']] = []
+                        trip_ids_by_route[row['route_id']].append(row['trip_id'])
+
+            # get trip id
+            all_trip_ids = [trip_id for trips in trip_ids_by_route.values() for trip_id in trips]
+
+            trip_info = {}
+            with open(trips_file, 'r', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    if row['trip_id'] in all_trip_ids:
+                        trip_info[row['trip_id']] = {
+                            'route_id': row['route_id'],
+                            'service_id': row['service_id'],
+                            'trip_headsign': row.get('trip_headsign', ''),
+                            'direction_id': row.get('direction_id', ''),
+                            'trip_id': row['trip_id']
+                        }
+
+            # get time
+            current_time = datetime.datetime.now().time()
+            current_time_str = current_time.strftime('%H:%M:%S')
+
+
+            future_stop_times = []
+            with open(stop_times_file, 'r', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    if row['stop_id'] == station_id and row['trip_id'] in all_trip_ids:
+                        if row['arrival_time'] > current_time_str:
+                            future_stop_times.append({
+                                'trip_id': row['trip_id'],
+                                'arrival_time': row['arrival_time'],
+                                'departure_time': row['departure_time'],
+                                'stop_sequence': int(row['stop_sequence'])
+                            })
+
+            # sorted by time
+            future_stop_times.sort(key=lambda x: x['arrival_time'])
+
+            # each line can only get 5 future trip
+            max_trips_per_route = 5
+            route_trip_count = {}
+            filtered_stop_times = []
+
+            for time in future_stop_times:
+                trip_id = time['trip_id']
+                if trip_id in trip_info:
+                    route_id = trip_info[trip_id]['route_id']
+
+                    if route_id not in route_trip_count:
+                        route_trip_count[route_id] = 0
+
+                    if route_trip_count[route_id] < max_trips_per_route:
+                        filtered_stop_times.append(time)
+                        route_trip_count[route_id] += 1
+
+            schedule = []
+            for time in filtered_stop_times:
+                if time['trip_id'] in trip_info:
+                    trip = trip_info[time['trip_id']]
+                    schedule.append({
+                        'route_id': trip['route_id'],
+                        'trip_headsign': trip['trip_headsign'],
+                        'arrival_time': time['arrival_time'],
+                        'departure_time': time['departure_time'],
+                        'direction_id': trip['direction_id']
+                    })
+
+            # max schedule limit
+            max_schedule_entries = 40
+            if len(schedule) > max_schedule_entries:
+                schedule = schedule[:max_schedule_entries]
+
+            return {
+                'schedule_entries': len(schedule),
+                'schedule': schedule
+            }
+
+        except Exception as e:
+            return {"error": f"Failed to get station schedule: {str(e)}"}
+
+    def get_accessibility_data(self, data_type):
+        """
+        Get accessibility data
+
+        Args:
+            data_type (str): Data type ('current', 'upcoming', 'equipment')
+
+        Returns:
+            dict: Accessibility data or error
+        """
+
+        if data_type not in ELEVATOR_ESCALATOR_FEEDS:
+            return {"error": f"Invalid accessibility data type: {data_type}"}
+
+
+        cache_key = f"accessibility_{data_type}"
+        cached_data = cache.get(cache_key, self.get_cache_timeout('accessibility', data_type))
+        if cached_data:
+            return cached_data
+
+
+        try:
+            response = requests.get(ELEVATOR_ESCALATOR_FEEDS[data_type])
+
+            if response.status_code == 200:
+                data = response.json()
+
+                cache.set(cache_key, data)
+                return data
+            else:
+                return {"error": f"HTTP error: {response.status_code}"}
+
+        except Exception as e:
+            return {"error": str(e)}
+
+    def get_station_route_schedule(self, station_id, route_id):
+        """
+        Get schedule for a specific route at a specific station
+
+        Args:
+            station_id (str): Station ID
+            route_id (str): Route ID
+
+        Returns:
+            dict: Schedule information for specific route
+        """
+        try:
+            # GTFS文件路径
+            stop_times_file = os.path.join('data', 'gtfs_subway', 'stop_times.txt')
+            trips_file = os.path.join('data', 'gtfs_subway', 'trips.txt')
+
+            trip_ids = []
+            with open(trips_file, 'r', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    if row['route_id'] == route_id:
+                        trip_ids.append(row['trip_id'])
+
+            if not trip_ids:
+                return {"error": f"No trips found for route {route_id}"}
+
+
+            trip_info = {}
+            with open(trips_file, 'r', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    if row['trip_id'] in trip_ids:
+                        trip_info[row['trip_id']] = {
+                            'trip_headsign': row.get('trip_headsign', ''),
+                            'direction_id': row.get('direction_id', '')
+                        }
+
+
+            current_time = datetime.datetime.now().time()
+            current_time_str = current_time.strftime('%H:%M:%S')
+
+
+            future_stop_times = []
+            with open(stop_times_file, 'r', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    if row['stop_id'] == station_id and row['trip_id'] in trip_ids:
+
+                        if row['arrival_time'] > current_time_str:
+                            future_stop_times.append({
+                                'trip_id': row['trip_id'],
+                                'arrival_time': row['arrival_time'],
+                                'departure_time': row['departure_time']
+                            })
+
+
+            future_stop_times.sort(key=lambda x: x['arrival_time'])
+
+
+            max_schedule_entries = 10
+            if len(future_stop_times) > max_schedule_entries:
+                future_stop_times = future_stop_times[:max_schedule_entries]
+
+
+            schedule = []
+            for time in future_stop_times:
+                if time['trip_id'] in trip_info:
+                    trip = trip_info[time['trip_id']]
+                    schedule.append({
+                        'trip_headsign': trip['trip_headsign'],
+                        'arrival_time': time['arrival_time'],
+                        'departure_time': time['departure_time'],
+                        'direction_id': trip['direction_id']
+                    })
+
+            return {
+                'station_id': station_id,
+                'route_id': route_id,
+                'schedule_entries': len(schedule),
+                'schedule': schedule
+            }
+
+        except Exception as e:
+            return {"error": f"Failed to get station route schedule: {str(e)}"}
