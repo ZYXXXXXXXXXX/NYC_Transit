@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import GoogleMapReact from 'google-map-react';
 import Marker from './Marker';
-import StationInfoDialog from './StationInfoDialog'
+import StationInfoDialog from './StationInfoDialog';
 import { SubwayRoute, Station } from '~/types/api';
 
 interface MapProps {
@@ -9,7 +9,7 @@ interface MapProps {
   zoom: number;
 }
 
-// Store multi-line data (color and coordinate)
+// Data structure to store subway line information (color and coordinates)
 interface LineData {
   color: string;
   path: Array<{ lat: number; lng: number }>;
@@ -20,31 +20,19 @@ export default function SubwayMap(props: MapProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [lineCoordinates, setLineCoordinates] = useState<LineData[]>([]);
   const [selectedStationInfo, setSelectedStationInfo] = useState<Station | null>(null);
-  const currentLinesRef = useRef<google.maps.Polyline[]>([]);
   
+  // Refs to store Google Maps objects and drawn polylines
+  const currentLinesRef = useRef<google.maps.Polyline[]>([]);
+  const mapRef = useRef(null);     // Reference to Google Map instance
+  const mapsRef = useRef(null);    // Reference to Google Maps API
 
-  const mapRef = useRef(null);   // Used to store map instance
-  const mapsRef = useRef(null);  // Used to store maps object (google.maps)
-
-  // Used to store currently drawn lines on the map, for easy clearing/updating when clicking other stations
-  const currentLineRef = useRef(null);
-
-  // 1. Fetch subway station data during initialization
+  // Fetch all subway stations when component mounts
   useEffect(() => {
     async function fetchStations() {
       try {
         const res = await fetch('http://127.0.0.1:5000/api/stations');
         const data = await res.json();
         setStations(data);
-        stations.forEach(station => {
-          const circle = new google.maps.Circle({
-            strokeColor: "#000000",
-            fillColor: "#FFFFFF",
-            map: mapRef.current,
-            center: { lat: station.lat, lng:station.lng },
-            radius: 5,
-          })
-        })
       } catch (err) {
         console.error('Error fetching station information', err);
       }
@@ -52,85 +40,85 @@ export default function SubwayMap(props: MapProps) {
     fetchStations();
   }, []);
 
-  // 2. When clicking a Marker, request the complete route data for that station from the backend
+  /**
+   * Handles marker click event:
+   * 1. Fetches station info and associated routes
+   * 2. Gets all stops for each route
+   * 3. Prepares line coordinates for drawing
+   * 4. Opens station info dialog
+   */
   const handleMarkerClick = async (stationId: string) => {
     try {
-      // 0. Get station base info
+      // Get station info and its associated routes
       const infoRes = await fetch(`http://127.0.0.1:5000/api/stations/${stationId}/routes`);
-      const stationInfo = await infoRes.json();  // contains: id, name, accessibility
-      // 1. Get route information for this station
-      const routesRes = await fetch(`http://127.0.0.1:5000/api/stations/${stationId}/routes`);
-      const routesData = await routesRes.json();
-      const routes: SubwayRoute[] = routesData.routes;
-  
-      // 2. Get global station-route mapping relationship
-      const stationRouteMapRes = await fetch('http://127.0.0.1:5000/api/station-route-map');
-      const stationRouteMap = await stationRouteMapRes.json();
-  
-      // 3. Construct path data for each route
-      const newLineCoordinates: LineData[] = routes.map(route => {
-        // Find all station keys containing current route id
-        const stationIds = Object.keys(stationRouteMap).filter(stationKey => {
-          return stationRouteMap[stationKey].includes(route.id);
-        });
-  
-        // Filter corresponding coordinates from stations state based on stationIds
-        const path = stationIds
-          .map(id => stations.find(s => s.id === id))
-          .filter((station): station is NonNullable<typeof station> => Boolean(station)) // Type guard
-          .map(station => ({ lat: station.lat, lng: station.lng }));
-  
-        return {
-          color: `#${route.color}`,
-          path,
-        };
-      });
-  
-      // 4. Update state, trigger route drawing
+      const stationInfo = await infoRes.json();
+      const routes: SubwayRoute[] = stationInfo.routes;
+
+      // Fetch all stops for each route in parallel
+      const routesWithStops = await Promise.all(
+        routes.map(async (route) => {
+          const stopsRes = await fetch(`http://127.0.0.1:5000/api/routes/${route.id}/stops`);
+          const stopsData = await stopsRes.json();
+          return { 
+            route, 
+            path: stopsData.stops.map(stop => ({ lat: stop.lat, lng: stop.lng }))
+          };
+        })
+      );
+
+      // Prepare line data for each route (color + coordinates)
+      const newLineCoordinates: LineData[] = routesWithStops.map(({ route, path }) => ({
+        color: `#${route.color}`,  // Convert color code to hex format
+        path: path
+      }));
+
+      // Update state to trigger line drawing
       setLineCoordinates(newLineCoordinates);
+      
+      // Prepare station info for the dialog
       setSelectedStationInfo({
         id: stationId,
         name: stationInfo.name,
-        routes: routes.map(r => ({
-          id: r.id,
-          color: r.color
-        }))
+        routes: routes.map(r => ({ id: r.id, color: r.color }))
       });
+      
+      // Open the station info dialog
       setDialogOpen(true);
     } catch (err) {
       console.error('Error fetching route data', err);
     }
   };
 
-  // 3. Listen to lineCoordinates changes, once new route data is available, use native API to draw
-useEffect(() => {
-  if (!mapRef.current || !mapsRef.current || lineCoordinates.length === 0) return;
+  /**
+   * Effect to draw polylines when lineCoordinates changes:
+   * 1. Clears existing lines
+   * 2. Draws new lines based on current coordinates
+   */
+  useEffect(() => {
+    // Skip if required objects aren't initialized or no lines to draw
+    if (!mapRef.current || !mapsRef.current || lineCoordinates.length === 0) return;
 
-  // Clear previous lines
-  if (currentLinesRef.current.length > 0) {
+    // Clear all existing lines from the map
     currentLinesRef.current.forEach(line => line.setMap(null));
     currentLinesRef.current = [];
-  }
 
-  // Draw new lines
-  const newLines = lineCoordinates.map(line => {
-    return new mapsRef.current.Polyline({
-      path: line.path,
-      geodesic: true,
-      strokeColor: line.color,
-      strokeOpacity: 1.0,
-      strokeWeight: 4,
+    // Create new polylines for each route
+    const newLines = lineCoordinates.map(line => {
+      return new mapsRef.current.Polyline({
+        path: line.path,          // Array of coordinates
+        geodesic: true,            // Follows Earth's curvature
+        strokeColor: line.color,    // Line color from route data
+        strokeOpacity: 1.0,         // Fully opaque
+        strokeWeight: 4,           // Line thickness
+      });
     });
-  });
 
-  // Add new lines to map and save reference
-  newLines.forEach(line => line.setMap(mapRef.current));
-  currentLinesRef.current = newLines;
+    // Add all new lines to the map and store references
+    newLines.forEach(line => line.setMap(mapRef.current));
+    currentLinesRef.current = newLines;
+  }, [lineCoordinates]);
 
-}, [lineCoordinates]);
-
-
-  // 4. Google Map's onGoogleApiLoaded callback
+  // Callback when Google Maps API loads - stores map references
   const handleApiLoaded = ({ map, maps }) => {
     mapRef.current = map;
     mapsRef.current = maps;
@@ -140,14 +128,13 @@ useEffect(() => {
     <div style={{ height: '90vh', width: '100%' }}>
       <GoogleMapReact
         bootstrapURLKeys={{ key: process.env.REACT_APP_GOOGLE_MAPS_API_KEY || '' }}
-        defaultCenter={{ lat: 40.714, lng: -74.001 }} // Default center point can be customized
-        defaultZoom={14}                            // Default zoom level
-        options={{
-          mapId: '84a43dd24922060d', 
-        }}
+        defaultCenter={{ lat: 40.714, lng: -74.001 }}  // Default NYC coordinates
+        defaultZoom={14}                                // Medium zoom level
+        options={{ mapId: '84a43dd24922060d' }}         // Custom map style ID
         yesIWantToUseGoogleMapApiInternals
         onGoogleApiLoaded={handleApiLoaded}
       >
+        {/* Render markers for all stations */}
         {stations.map((station) => (
           <Marker
             key={station.id}
@@ -158,10 +145,12 @@ useEffect(() => {
           />
         ))}
       </GoogleMapReact>
+      
+      {/* Station information dialog */}
       <StationInfoDialog
-            open={dialogOpen}
-            onClose={() => setDialogOpen(false)}
-            station={selectedStationInfo}
+        open={dialogOpen}
+        onClose={() => setDialogOpen(false)}
+        station={selectedStationInfo}
       />
     </div>
   );
