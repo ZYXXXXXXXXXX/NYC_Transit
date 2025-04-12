@@ -1237,11 +1237,12 @@ class DataService:
     def get_accessible_stations(self):
         """
         Get all stations with accessibility features based on MTA's accessibility API
+
         """
         try:
 
             cache_key = "accessible_stations"
-            cached_data = None  # 测试时临时禁用缓存
+            cached_data = cache.get(cache_key, 3600)  # 缓存1小时
             if cached_data:
                 return cached_data
 
@@ -1250,20 +1251,20 @@ class DataService:
             if "error" in equipment_data:
                 return {"error": f"Failed to get equipment data: {equipment_data['error']}"}
 
-            print(f"Equipment data count: {len(equipment_data) if isinstance(equipment_data, list) else 'not a list'}")
 
+            all_stations = self.get_stations()
+            if isinstance(all_stations, dict) and "error" in all_stations:
+                return {"error": f"Failed to get stations: {all_stations['error']}"}
+
+
+            name_to_stations = {}
+            for station in all_stations:
+                name = station['name'].lower().strip()
+                if name not in name_to_stations:
+                    name_to_stations[name] = []
+                name_to_stations[name].append(station)
 
             station_route_map = self.get_station_route_map()
-            if isinstance(station_route_map, dict) and "error" in station_route_map:
-                print(f"Error getting station route map: {station_route_map['error']}")
-                station_route_map = {}
-            else:
-                print(f"Station route map keys: {len(station_route_map)} entries")
-                sample_keys = list(station_route_map.keys())[:5]
-                print(f"Sample station IDs in route map: {sample_keys}")
-                for key in sample_keys:
-                    print(f"  Routes for {key}: {station_route_map[key]}")
-
 
             all_routes = {}
             routes_file = os.path.join('data', 'gtfs_subway', 'routes.txt')
@@ -1278,18 +1279,14 @@ class DataService:
                             "color": row.get('route_color', ''),
                             "text_color": row.get('route_text_color', '')
                         }
-                print(f"Total routes loaded: {len(all_routes)}")
             except Exception as e:
                 print(f"Error reading routes file: {str(e)}")
                 all_routes = {}
 
-
             stations_by_complex = {}
-
 
             for item in equipment_data:
                 complex_id = item.get('stationcomplexid', '').strip()
-                gtfs_id = item.get('elevatorgtfsstopid', '').strip()
                 station_name = item.get('station', '').strip()
 
                 if not complex_id or not station_name:
@@ -1302,7 +1299,7 @@ class DataService:
                         'has_accessibility': True,
                         'equipment': [],
                         'routes': [],
-                        'gtfs_ids': set()
+                        'serving_texts': []
                     }
 
 
@@ -1314,42 +1311,77 @@ class DataService:
                 }
                 stations_by_complex[complex_id]['equipment'].append(equipment_info)
 
-
-                if gtfs_id:
-                    stations_by_complex[complex_id]['gtfs_ids'].add(gtfs_id)
+                # serving_texts :for match station
+                if item.get('serving'):
+                    stations_by_complex[complex_id]['serving_texts'].append(item.get('serving', ''))
 
 
             for complex_id, station_data in stations_by_complex.items():
-                gtfs_ids = station_data['gtfs_ids']
-                print(f"Processing station {station_data['name']} with GTFS IDs: {gtfs_ids}")
+                station_name = station_data['name'].lower().strip()
+                serving_text = " ".join(station_data['serving_texts']).lower()
 
-                route_ids = set()
+                if station_name in name_to_stations:
+                    matching_stations = name_to_stations[station_name]
+
+                    if len(matching_stations) == 1:
+
+                        gtfs_id = matching_stations[0]['id']
+                        if gtfs_id in station_route_map:
+                            route_ids = station_route_map[gtfs_id]
+                            for route_id in route_ids:
+                                if route_id in all_routes:
+                                    station_data['routes'].append(all_routes[route_id])
+                    else:
+                        # match  accessibility ID to GTFS ID
+                        best_match = None
+                        max_score = 0
+
+                        for candidate in matching_stations:
+                            gtfs_id = candidate['id']
+                            if gtfs_id in station_route_map:
+                                route_ids = station_route_map[gtfs_id]
+                                score = 0
+
+                                # check route id and name
+                                for route_id in route_ids:
+                                    route_info = all_routes.get(route_id, {})
+                                    route_short_name = route_info.get('short_name', '')
+                                    route_long_name = route_info.get('long_name', '').lower()
 
 
-                for gtfs_id in gtfs_ids:
-                    if gtfs_id in station_route_map:
-                        found_routes = station_route_map[gtfs_id]
-                        print(f"  Found routes {found_routes} for GTFS ID {gtfs_id}")
-                        route_ids.update(found_routes)
+                                    if (route_id.lower() in serving_text or
+                                            (route_short_name and (
+                                                    route_short_name.lower() in serving_text or
+                                                    f"line {route_short_name.lower()}" in serving_text or
+                                                    f"{route_short_name.lower()} train" in serving_text or
+                                                    f"{route_short_name.lower()}-bound" in serving_text or
+                                                    f"{route_short_name.lower()} platform" in serving_text)) or
+                                            (route_long_name and route_long_name in serving_text)):
+                                        score += 1
+
+                                # mapping by local
+                                for word in serving_text.split():
+                                    if word in ["uptown", "downtown", "manhattan", "brooklyn", "bronx", "queens"]:
+                                        for route_id in route_ids:
+                                            if word in all_routes.get(route_id, {}).get('long_name', '').lower():
+                                                score += 0.5
+
+                                if score > max_score:
+                                    max_score = score
+                                    best_match = gtfs_id
+
+                        if best_match and best_match in station_route_map:
+                            route_ids = station_route_map[best_match]
+                            for route_id in route_ids:
+                                if route_id in all_routes:
+                                    station_data['routes'].append(all_routes[route_id])
 
 
-                for route_id in route_ids:
-                    if route_id in all_routes:
-                        station_data['routes'].append(all_routes[route_id])
-
-                print(f"  Final routes count: {len(station_data['routes'])}")
-
-                station_data['gtfs_ids'] = list(station_data['gtfs_ids'])
+                if 'serving_texts' in station_data:
+                    del station_data['serving_texts']
 
 
-            accessible_stations = []
-            for station in stations_by_complex.values():
-                if 'gtfs_ids' in station:
-                    del station['gtfs_ids']
-                accessible_stations.append(station)
-
-            print(f"\nTotal accessible stations: {len(accessible_stations)}")
-
+            accessible_stations = list(stations_by_complex.values())
 
             cache.set(cache_key, accessible_stations)
             return accessible_stations
@@ -1360,4 +1392,3 @@ class DataService:
             print(f"Error in get_accessible_stations: {str(e)}")
             print(trace)
             return {"error": f"Failed to get accessible stations: {str(e)}", "trace": trace}
-
