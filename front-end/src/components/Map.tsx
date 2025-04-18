@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import GoogleMapReact from 'google-map-react';
 import Marker from './Marker';
-import StationInfoDialog from './StationInfoDialog';
+import StationInfoDialog from '../pages/StationInfoDialog';
 import { SubwayRoute, Station } from '~/types/api';
 
 interface MapProps {
@@ -32,6 +32,7 @@ export default function SubwayMap(props: MapProps) {
       try {
         const res = await fetch('http://127.0.0.1:5000/api/stations');
         const data = await res.json();
+        console.log('Fetched stations:', data);
         setStations(data);
       } catch (err) {
         console.error('Error fetching station information', err);
