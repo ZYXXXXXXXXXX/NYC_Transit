@@ -1,12 +1,33 @@
-# Project Name: NYC Transit Hub
-Objective: Develop a web application to offer real-time updates, schedules, and transit information for New York City's public transportation system
+# 🗺️ NYC Transit Info Web App
 
-Interactive Map: Display a real-time map of subway and bus routes, allowing users to visualize transit options
-Favorites and Alerts: Allow users to save favorite routes/stations and set up notifications for service changes or delays
-Accessibility Information: Include details about elevator and escalator availability at stations for accessibility.
-Service Status Dashboard: Show an overview of the status of all MTA services in a single dashboard.
-Multilingual Support: Offer the application in multiple languages.
-User Accounts: Basic account creation and user authentication using Firebase.
+A web application providing real-time updates, schedules, and transit information for New York City’s public transportation system.
+
+## 🔧 Key Features
+
+- **Interactive Map**  
+  Real-time display of subway and bus routes using Google Maps API and React.
+
+- **Favorites & Alerts**  
+  Users can save favorite routes/stations and receive alerts for delays or service changes.
+
+- **Accessibility Info**  
+  Station-specific details on elevator and escalator availability.
+
+- **Service Status Dashboard**  
+  Overview of current service status across all MTA transit lines.
+
+- **Multilingual Support**  
+  Interface available in multiple languages for diverse user access.
+
+- **User Accounts**  
+  Account creation and login system with Firebase Authentication and SQLite for user preferences.
+
+## 🛠️ Tech Stack
+
+- **Frontend**: React, Google Maps API  
+- **Backend**: Flask  
+- **Authentication**: Firebase  
+- **Database**: SQLite
 
 ## How to Run
 ### make sure you have the right env
