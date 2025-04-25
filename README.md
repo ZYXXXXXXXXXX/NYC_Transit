@@ -31,7 +31,7 @@ A web application providing real-time updates, schedules, and transit informatio
 
 ## How to Run
 ### make sure you have the right env
-open terminal at the front-end pkg  
+(open terminal at the front-end pkg)  
 npm install  
 npm install @vis.gl/react-google-maps  
 ### Run the backend (make sure all pkgs installed)
