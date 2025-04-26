@@ -13,6 +13,8 @@ import { scheduler } from 'timers/promises';
 import ElevatorIcon from '@mui/icons-material/Elevator';
 import BuildIcon from '@mui/icons-material/Build'; 
 import LinearProgress from '@mui/material/LinearProgress';
+import { useTranslation } from 'react-i18next';
+
 
 interface StationRoute {
   id: string;
@@ -61,6 +63,7 @@ interface Props {
 export default function StationInfoDialog({ open, onClose, station }: Props) {
   const [enrichedStation, setEnrichedStation] = useState<EnrichedStationInfo | null>(null);
   const [accessStation, setAccessStation] = useState<AccessStationInfo | null>(null);
+  const { t } = useTranslation();
 
   useEffect(() => {
     if (station && open) {
@@ -120,7 +123,7 @@ export default function StationInfoDialog({ open, onClose, station }: Props) {
       <DialogTitle>{enrichedStation.name}</DialogTitle>
       <DialogContent>
         <Typography variant="subtitle1" gutterBottom>
-          Line：
+          {t('line')}:
         </Typography>
         <Stack direction="row" spacing={1} flexWrap="wrap">
           {enrichedStation.routes.map(route => (
@@ -140,13 +143,15 @@ export default function StationInfoDialog({ open, onClose, station }: Props) {
           <>
             {/* 显示是否支持辅助功能 */}
             <Typography variant="subtitle1" sx={{ mt: 2 }}>
-              Accessibility: {accessStation.accessibility === 'Yes' ? 'Yes' : 'No'}
+            {t('accessibility')}: {accessStation.accessibility === 'Yes' ? t('yes') : t('no')}
             </Typography>
 
             {/* 若有设备则渲染设备列表，否则显示“无设备”提示 */}
             {accessStation.equipment.length > 0 ? (
               <>
-                <Typography variant="subtitle2" sx={{ mt: 2 }}>Accessibility Equipment</Typography>
+                <Typography variant="subtitle2" sx={{ mt: 2 }}>
+                  {t('accessibilityequi')}
+                  </Typography>
                 {accessStation.equipment.map((item, index) => (
                   <Stack direction="row" alignItems="center" spacing={1} key={index} sx={{ ml: 2 }}>
                     {item.equipment_type === "EL" ? (
@@ -155,7 +160,7 @@ export default function StationInfoDialog({ open, onClose, station }: Props) {
                       <BuildIcon color={item.is_active ? "primary" : "disabled"} />
                     )}
                     <Typography variant="body2">
-                      {item.equipment_type} ({item.equipment_no}) –{" "}
+                      {item.equipment_type} ({item.equipment_no}) {" "}
                       {item.is_active ? "Operational" : "Out of Service"}
                       <br />
                       <i>{item.serving}</i>
@@ -172,7 +177,7 @@ export default function StationInfoDialog({ open, onClose, station }: Props) {
         )}
 
         <Typography variant="subtitle1" sx={{ mt: 2 }}>
-          Schedule:
+          {t('schedule')}:
         </Typography>
 
         {enrichedStation.routes.map(route => (
@@ -218,13 +223,14 @@ export default function StationInfoDialog({ open, onClose, station }: Props) {
         ))}
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>Close</Button>
+        <Button onClick={onClose}>{t('close')}</Button>
       </DialogActions>
     </Dialog>
   );
 }
 
 function NextTrainProgress({ nextTime }: { nextTime: string }) {
+  const { t } = useTranslation();
   const [progress, setProgress] = useState(0);
   const [minutesLeft, setMinutesLeft] = useState<number | null>(null);
 
@@ -249,8 +255,8 @@ function NextTrainProgress({ nextTime }: { nextTime: string }) {
     <div>
       <Typography variant="caption" color="textSecondary">
         {minutesLeft !== null && minutesLeft >= 0
-          ? `Next train in ${minutesLeft} min`
-          : 'Departed'}
+          ? t('nextTrain', { min: minutesLeft })
+          : t('departed')}
       </Typography>
       <LinearProgress
         variant="determinate"

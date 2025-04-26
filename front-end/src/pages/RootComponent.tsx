@@ -15,6 +15,8 @@ import SubwayIcon from '@mui/icons-material/Subway';
 import LoginIcon from '@mui/icons-material/Login';
 import StatusPage from './StatusPage'
 import path from 'path'
+import { useTranslation } from 'react-i18next';
+import { Select, MenuItem } from '@mui/material';
 
 const drawerWidth = 240;
 
@@ -22,12 +24,14 @@ export default function RootComponent() {
     const [mobileOpen, setMobileOpen] = React.useState(false);
     const [isClosing, setIsClosing] = React.useState(false);
     const [showLoginPrompt, setShowLoginPrompt] = React.useState(false)
+    const { t, i18n } = useTranslation();
     const drawerItems = [
-        { text: 'Transit Map', path: ROUTES.HOMEPAGE_ROUTE, icon: <MapIcon /> },
-        { text: 'Service Status', path: ROUTES.SERVICE_STATUS, icon: <SubwayIcon /> },
-        { text: 'User Center', path: ROUTES.USER_PAGE_ROUTE, is_protected: true, icon: <AccountCircleIcon />}
-    ]
+        { text: t('transitMap'),   path: ROUTES.HOMEPAGE_ROUTE,     icon: <MapIcon /> },
+        { text: t('serviceStatus'),path: ROUTES.SERVICE_STATUS,     icon: <SubwayIcon /> },
+        { text: t('userCenter'),   path: ROUTES.USER_PAGE_ROUTE, is_protected: true, icon: <AccountCircleIcon /> },
+      ];
     const navigate = useNavigate()
+    
     
 
     const handleDrawerClose = () => {
@@ -105,25 +109,44 @@ export default function RootComponent() {
                         MetroDiver
                     </Typography>
 
-                    <Button variant="outlined"
-                            color='inherit' 
-                            startIcon={<LoginIcon />} 
-                            sx={{ ml:1}}
-                            onClick={() => {
-                        window.location.href = ROUTES.LOGIN_ROUTE
-                    }}>
-                        Login
+
+                    <Select
+                    size="small"
+                    value={i18n.language}
+                    onChange={(e) => i18n.changeLanguage(e.target.value).then(() => window.location.reload())}
+                    sx={{
+                    mr: 1,
+                    color: 'white',
+                    '.MuiOutlinedInput-notchedOutline': { border: 0 },
+                    '& .MuiSvgIcon-root': { color: 'white' },
+                    }}
+                    >
+                    <MenuItem value="zh">中文</MenuItem>
+                    <MenuItem value="en">English</MenuItem>
+                    <MenuItem value="es">Español</MenuItem>
+                    </Select>
+
+
+                    <Button
+                    variant="outlined"
+                    color="inherit"
+                    startIcon={<LoginIcon />}
+                    sx={{ ml: 1 }}
+                    onClick={() => { window.location.href = ROUTES.LOGIN_ROUTE; }}
+                    >
+                    {t('login')}
                     </Button>
 
-                    <Button variant="outlined"
-                            color='inherit' 
-                            startIcon={<ExitToAppIcon />} 
-                            sx={{ ml:1}}
-                            onClick={() => {
-                        localStorage.removeItem('token')
-                        window.location.href = ROUTES.HOMEPAGE_ROUTE
+                    <Button
+                    variant="outlined"
+                    color="inherit"
+                    startIcon={<ExitToAppIcon />}
+                    sx={{ ml: 1 }}
+                    onClick={() => {
+                    localStorage.removeItem('token');
+                    window.location.href = ROUTES.HOMEPAGE_ROUTE;
                     }}>
-                        Logout
+                        {t('logout')}
                     </Button>
                 </Toolbar>
             </AppBar>
@@ -135,7 +158,7 @@ export default function RootComponent() {
                 anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
             >
                 <Alert severity="warning" sx={{ width: '100%' }}>
-                    Not logged in, please log in first
+                    {t('notLoggedIn')}
                 </Alert>
             </Snackbar>
 

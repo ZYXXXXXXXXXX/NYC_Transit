@@ -3,6 +3,7 @@ import GoogleMapReact from 'google-map-react';
 import Marker from './Marker';
 import StationInfoDialog from '../pages/StationInfoDialog';
 import { SubwayRoute, Station } from '~/types/api';
+import i18n from '../i18n';
 
 interface MapProps {
   center: { lat: number; lng: number };
@@ -142,7 +143,10 @@ export default function SubwayMap(props: MapProps) {
   return (
     <div style={{ height: '90vh', width: '100%' }}>
       <GoogleMapReact
-        bootstrapURLKeys={{ key: process.env.REACT_APP_GOOGLE_MAPS_API_KEY || '' }}
+        bootstrapURLKeys={{ 
+          key: process.env.REACT_APP_GOOGLE_MAPS_API_KEY || '',
+          language: i18n.language, }}
+          
         defaultCenter={{ lat: 40.714, lng: -74.001 }}  // Default NYC coordinates
         defaultZoom={14}                                // Medium zoom level
         options={{ mapId: '84a43dd24922060d' }}         // Custom map style ID
