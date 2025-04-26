@@ -1,13 +1,15 @@
 import React from 'react';
+import MyLocationIcon from '@mui/icons-material/MyLocation';
 
 interface MarkerProps {
     lat: number;
     lng: number;
     text?: string;
     onClick?: () => void;
+    type?: 'station' | 'user';
 }
 
-const Marker: React.FC<MarkerProps> = ({ text, onClick }) => {
+const Marker: React.FC<MarkerProps> = ({ text, onClick, type }) => {
     return (
         <div 
             onClick={onClick} 
@@ -16,9 +18,11 @@ const Marker: React.FC<MarkerProps> = ({ text, onClick }) => {
             display: 'flex', 
             alignItems: 'center' 
           }}>
-            <img 
-            style={{ width: '24px', height: '24px' }} 
-            src="/marker.png" alt="marker" />
+            {type === 'user' ? (
+                <MyLocationIcon color="primary" />
+            ) : (
+            <img src="/marker.png" style={{ width: 24 }} />
+            )}
             <span style={{ fontWeight: 'bold'}}>{text || '📍'}</span>
         </div>
     )

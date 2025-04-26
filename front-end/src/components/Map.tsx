@@ -20,6 +20,7 @@ export default function SubwayMap(props: MapProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [lineCoordinates, setLineCoordinates] = useState<LineData[]>([]);
   const [selectedStationInfo, setSelectedStationInfo] = useState<Station | null>(null);
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   
   // Refs to store Google Maps objects and drawn polylines
   const currentLinesRef = useRef<google.maps.Polyline[]>([]);
@@ -28,6 +29,19 @@ export default function SubwayMap(props: MapProps) {
 
   // Fetch all subway stations when component mounts
   useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        position => {
+          setUserLocation({
+            lat: position.coords.latitude,
+            lng: position.coords.longitude
+          });
+        },
+        error => {
+          console.error('Geolocation error:', error);
+        }
+      );
+    }
     async function fetchStations() {
       try {
         const res = await fetch('http://127.0.0.1:5000/api/stations');
@@ -145,6 +159,15 @@ export default function SubwayMap(props: MapProps) {
             onClick={() => handleMarkerClick(station.id)}
           />
         ))}
+        {/* User markers */}
+        {userLocation && (
+          <Marker
+            lat={userLocation.lat}
+            lng={userLocation.lng}
+            text="You"
+            type="user"  // 可以自定义成图标组件
+          />
+        )}
       </GoogleMapReact>
       
       {/* Station information dialog */}
