@@ -8,7 +8,7 @@ const resources = {
     translation: {
       appTitle: 'MetroDiver',
       transitMap: 'Transit Map',
-      serviceStatus: 'Service Status',
+      serviceStatus: 'Favorite Subway Roads',
       userCenter: 'User Center',
       login: 'Login',
       logout: 'Logout',
@@ -29,7 +29,7 @@ const resources = {
     translation: {
       appTitle: '地铁导航',
       transitMap: '线路图',
-      serviceStatus: '服务状态',
+      serviceStatus: '最喜欢的地铁线路',
       userCenter: '用户中心',
       login: '登录',
       logout: '登出',
@@ -50,7 +50,7 @@ const resources = {
     translation: {
       appTitle: 'MetroDiver',
       transitMap: 'Mapa',
-      serviceStatus: 'Estado del servicio',
+      serviceStatus: 'Caminos del metro favoritos',
       userCenter: 'Centro de usuario',
       login: 'Iniciar sesión',
       logout: 'Cerrar sesión',

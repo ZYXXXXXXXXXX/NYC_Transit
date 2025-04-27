@@ -25,10 +25,12 @@ export default function RootComponent() {
     const [isClosing, setIsClosing] = React.useState(false);
     const [showLoginPrompt, setShowLoginPrompt] = React.useState(false)
     const { t, i18n } = useTranslation();
+    const location = window.location.pathname;
+
     const drawerItems = [
-        { text: t('transitMap'),   path: ROUTES.HOMEPAGE_ROUTE,     icon: <MapIcon /> },
-        { text: t('serviceStatus'),path: ROUTES.SERVICE_STATUS,     icon: <SubwayIcon /> },
-        { text: t('userCenter'),   path: ROUTES.USER_PAGE_ROUTE, is_protected: true, icon: <AccountCircleIcon /> },
+        { text: t('transitMap'), path: ROUTES.HOMEPAGE_ROUTE, icon: <MapIcon /> },
+        { text: t('serviceStatus'), path: ROUTES.SERVICE_STATUS, icon: <SubwayIcon /> },
+        { text: t('userCenter'), path: ROUTES.USER_PAGE_ROUTE, is_protected: true, icon: <AccountCircleIcon /> },
       ];
     const navigate = useNavigate()
     
@@ -76,6 +78,20 @@ export default function RootComponent() {
             </List>
         </div>
     );
+
+    const isLoginPage = location === ROUTES.LOGIN_ROUTE;
+
+    if (isLoginPage) {
+        return (
+            <Box>
+                <CssBaseline />
+                <Routes>
+                    <Route path={ROUTES.LOGIN_ROUTE} element={<LoginPage />} />
+                    <Route path="*" element={<NotFoundPage />} />
+                </Routes>
+            </Box>
+        );
+    }
 
     return (
 
