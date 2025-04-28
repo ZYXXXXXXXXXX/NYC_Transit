@@ -1,13 +1,22 @@
 """Application configuration"""
+import os
+
+# 获取配置文件所在目录
+basedir = os.path.abspath(os.path.dirname(__file__))
+# 获取项目根目录（back-end的上一级目录）
+project_root = os.path.dirname(basedir)
+instance_dir = os.path.join(project_root, 'instance')
+
+# 确保 instance 文件夹存在
+if not os.path.exists(instance_dir):
+    os.makedirs(instance_dir)
 
 # Database configuration
-SQLALCHEMY_DATABASE_URI = 'sqlite:///nyc_transit.db'  # Use SQLite for development
+SQLALCHEMY_DATABASE_URI = f'sqlite:///{os.path.join(instance_dir, "nyc_transit.db")}'
 SQLALCHEMY_TRACK_MODIFICATIONS = False
 
 # If password protection is needed, add a secret key
 SECRET_KEY = 'your-secret-key-here'  # Use environment variables in production
-
-
 
 # Data feed URLs
 SUBWAY_FEEDS = {
@@ -36,12 +45,12 @@ SERVICE_ALERT_FEEDS = {
    'lirr_alerts':'https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/camsys%2Flirr-alerts',
    'mnr_alerts': 'https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/camsys%2Fmnr-alerts'
 }
+
 # Accessibility data feeds
 ELEVATOR_ESCALATOR_FEEDS = {
    'current':"https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fnyct_ene.json",
    'upcoming':'https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fnyct_ene_upcoming.json',
    'equipment':'https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fnyct_ene_equipments.json'
-
 }
 
 # Cache settings

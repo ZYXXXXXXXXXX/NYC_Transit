@@ -43,33 +43,83 @@ export default function LoginPage() {
     const [loading, setLoading] = useState(false);
     const [mode, setMode] = useState('login');
   
+
     const handleLogin = async () => {
-      if (!email || !password) {
-        setError('Please fill in all fields.');
+  if (!email || !password) {
+    setError('Please fill in all fields.');
+    return;
+  }
+  setLoading(true);
+  try {
+    const userCredential = await signInWithEmailAndPassword(auth, email, password);
+    const user = userCredential.user;
+
+    if (!user.emailVerified) {
+      await user.reload();
+      if (!user.emailVerified) {
+        setError('Email not verified. Please check your inbox.');
         return;
       }
-      setLoading(true);
-      try {
-        const userCredential = await signInWithEmailAndPassword(auth, email, password);
-        const user = userCredential.user;
-    
-        if (!user.emailVerified) {
-          await user.reload();
-          if (!user.emailVerified) {
-            setError('Email not verified. Please check your inbox.');
-            return;
-          }
+    }
+
+    const idToken = await user.getIdToken();
+    localStorage.setItem('token', idToken);
+
+    // 同步用户到后端数据库
+    try {
+      const syncResponse = await fetch('http://localhost:5000/api/users/sync', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${idToken}`,
+          'Content-Type': 'application/json'
         }
-    
-        const idToken = await user.getIdToken();
-        localStorage.setItem('token', idToken);
-        navigate(from, { replace: true });
-      } catch (error) {
-        setError(parseFirebaseError(error));
-      } finally {
-        setLoading(false);
+      });
+
+      if (!syncResponse.ok) {
+        console.error('Failed to sync user with backend');
+      } else {
+        const userData = await syncResponse.json();
+        console.log('User synced successfully:', userData);
       }
-    };
+    } catch (syncError) {
+      console.error('Error syncing user:', syncError);
+      // 继续登录流程，即使同步失败
+    }
+
+    navigate(from, { replace: true });
+  } catch (error) {
+    setError(parseFirebaseError(error));
+  } finally {
+    setLoading(false);
+  }
+};
+    // const handleLogin = async () => {
+    //   if (!email || !password) {
+    //     setError('Please fill in all fields.');
+    //     return;
+    //   }
+    //   setLoading(true);
+    //   try {
+    //     const userCredential = await signInWithEmailAndPassword(auth, email, password);
+    //     const user = userCredential.user;
+    //
+    //     if (!user.emailVerified) {
+    //       await user.reload();
+    //       if (!user.emailVerified) {
+    //         setError('Email not verified. Please check your inbox.');
+    //         return;
+    //       }
+    //     }
+    //
+    //     const idToken = await user.getIdToken();
+    //     localStorage.setItem('token', idToken);
+    //     navigate(from, { replace: true });
+    //   } catch (error) {
+    //     setError(parseFirebaseError(error));
+    //   } finally {
+    //     setLoading(false);
+    //   }
+    // };
 
     const handleResendVerification = async () => {
       const user = auth.currentUser;

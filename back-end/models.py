@@ -5,14 +5,16 @@ from datetime import datetime
 db = SQLAlchemy()
 
 
+# models.py --添加了firebase uid
 class User(db.Model):
-    """User model"""
     id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(80), unique=True, nullable=False)
+    firebase_uid = db.Column(db.String(128), unique=True, nullable=False)  # 添加Firebase UID
+    username = db.Column(db.String(80), unique=True, nullable=True)
     email = db.Column(db.String(120), unique=True, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    last_login = db.Column(db.DateTime)
 
-    # Relationships
+    # 关系
     favorite_routes = db.relationship('FavoriteRoute', backref='user', lazy=True)
     favorite_stations = db.relationship('FavoriteStation', backref='user', lazy=True)
     notification_settings = db.relationship('NotificationSetting', backref='user', lazy=True)
